@@ -342,11 +342,16 @@
 
   function cellKey(nombre, fecha){ return nombre + "||" + fecha; }
 
-  function setSyncStatus(mode){
+  function setSyncStatus(mode, detalle){
     const dot = document.getElementById('syncDot');
     const txt = document.getElementById('syncTexto');
     dot.className = 'dot' + (mode === 'saving' ? ' saving' : mode === 'error' ? ' error' : '');
     txt.textContent = mode === 'saving' ? 'Guardando...' : mode === 'error' ? 'Error de sincronización' : 'Sincronizado';
+    if(mode === 'error' && detalle){
+      txt.title = detalle;
+    } else {
+      txt.removeAttribute('title');
+    }
   }
 
   // ---------- Construcción de la tabla ----------
@@ -505,18 +510,31 @@
   function guardar(){
     setSyncStatus('saving');
     if(guardarTimeout) clearTimeout(guardarTimeout);
-    guardarTimeout = setTimeout(async () => {
-      try{
-        await window.storage.set(STORAGE_KEY, JSON.stringify(data), true);
-        setSyncStatus('ok');
-      }catch(err){
-        console.error('Error guardando asistencia:', err);
-        setSyncStatus('error');
+    guardarTimeout = setTimeout(() => intentarGuardar(0), 150);
+  }
+
+  async function intentarGuardar(intento){
+    try{
+      if(!window.storage) throw new Error('window.storage no está disponible en este entorno');
+      await window.storage.set(STORAGE_KEY, JSON.stringify(data), true);
+      setSyncStatus('ok');
+    }catch(err){
+      console.error('Error guardando asistencia (intento ' + (intento + 1) + '):', err);
+      if(intento < 2){
+        setTimeout(() => intentarGuardar(intento + 1), 1000 * (intento + 1));
+      } else {
+        setSyncStatus('error', err && err.message);
       }
-    }, 150);
+    }
   }
 
   async function cargar(){
+    if(!window.storage){
+      setSyncStatus('error', 'window.storage no disponible: abre esta app dentro de Claude, no como archivo local');
+      document.getElementById('syncTexto').textContent = 'Sin sincronización (abre esto dentro de Claude)';
+      pintarTodo();
+      return;
+    }
     try{
       const res = await window.storage.get(STORAGE_KEY, true);
       if(res && res.value){
@@ -535,6 +553,7 @@
   }
 
   async function sondear(){
+    if(!window.storage) return;
     try{
       const res = await window.storage.get(STORAGE_KEY, true);
       const nuevo = res && res.value ? JSON.parse(res.value) : {};
