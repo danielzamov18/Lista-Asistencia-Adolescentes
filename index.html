@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Lista de Asistencia - Adolescentes</title>
+<style>
+  :root{
+    --azul-oscuro: #1F3864;
+    --azul-medio: #2E5395;
+    --azul-header: #4472C4;
+    --azul-claro: #DCE6F7;
+    --borde: #B9C6DE;
+    --verde: #2E7D46;
+    --verde-bg: #DDF3E4;
+    --rojo: #C0392B;
+    --rojo-bg: #FBE1DE;
+    --ambar: #B7791F;
+    --ambar-bg: #FBEED9;
+    --texto: #1B2733;
+    --texto-suave: #5A6B80;
+    --fondo: #F4F6FA;
+    --blanco: #FFFFFF;
+  }
+
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body{
+    margin:0; padding:0;
+    background: var(--fondo);
+    font-family: 'Segoe UI', 'Inter', system-ui, -apple-system, Arial, sans-serif;
+    color: var(--texto);
+  }
+
+  .app{
+    max-width: 100%;
+    padding: 14px;
+  }
+
+  .titulo-app{
+    background: linear-gradient(135deg, var(--azul-oscuro), var(--azul-medio));
+    color: #fff;
+    padding: 16px 20px;
+    border-radius: 10px 10px 0 0;
+    text-align: center;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+
+  .toolbar{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 10px;
+    background: var(--blanco);
+    border: 1px solid var(--borde);
+    border-top: none;
+    padding: 10px 14px;
+    flex-wrap: wrap;
+  }
+
+  .usuario-box{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--texto-suave);
+  }
+
+  .usuario-box b{ color: var(--texto); }
+
+  .cambiar-usuario{
+    border: 1px solid var(--borde);
+    background: var(--azul-claro);
+    color: var(--azul-oscuro);
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .cambiar-usuario:active{ transform: scale(0.97); }
+
+  .sync-status{
+    font-size: 12px;
+    color: var(--texto-suave);
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .dot{
+    width:8px; height:8px; border-radius:50%;
+    background: var(--verde);
+    transition: background 0.2s;
+  }
+  .dot.saving{ background: var(--ambar); }
+  .dot.error{ background: var(--rojo); }
+
+  .tabla-wrap{
+    overflow: auto;
+    max-height: 72vh;
+    border: 1px solid var(--borde);
+    border-top: none;
+    background: var(--blanco);
+    border-radius: 0 0 10px 10px;
+  }
+
+  table{
+    border-collapse: separate;
+    border-spacing: 0;
+    width: 100%;
+    min-width: 900px;
+  }
+
+  th, td{
+    border-right: 1px solid var(--borde);
+    border-bottom: 1px solid var(--borde);
+    white-space: nowrap;
+  }
+
+  thead th{
+    background: var(--azul-header);
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 700;
+    padding: 10px 8px;
+    text-align: center;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+  }
+
+  thead th.col-nombre{
+    left: 0;
+    z-index: 5;
+    background: var(--azul-oscuro);
+    text-align: left;
+    padding-left: 14px;
+  }
+
+  tbody td.col-nombre{
+    position: sticky;
+    left: 0;
+    background: var(--azul-claro);
+    color: var(--texto);
+    font-weight: 600;
+    font-size: 13px;
+    padding: 0 14px;
+    text-align: left;
+    z-index: 2;
+    border-right: 2px solid var(--borde);
+  }
+
+  tbody tr:nth-child(even) td.col-nombre{
+    background: #E7EFFB;
+  }
+
+  td.celda{
+    width: 64px;
+    min-width: 64px;
+    height: 44px;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+    font-weight: 800;
+    font-size: 15px;
+    color: transparent;
+    transition: background-color 0.12s ease;
+  }
+
+  td.celda.vacia{ background: var(--blanco); }
+  td.celda.vacia:hover{ background: #F0F3F9; }
+
+  td.celda.estado-check{ background: var(--verde-bg); color: var(--verde); }
+  td.celda.estado-x{ background: var(--rojo-bg); color: var(--rojo); }
+  td.celda.estado-a{ background: var(--ambar-bg); color: var(--ambar); }
+
+  td.celda.pressing{ filter: brightness(0.9); }
+
+  .leyenda{
+    margin-top: 16px;
+    background: var(--blanco);
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .leyenda-titulo{
+    background: var(--azul-oscuro);
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 10px 14px;
+    letter-spacing: 0.3px;
+  }
+
+  .leyenda-body{
+    padding: 12px 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 22px;
+    font-size: 13px;
+  }
+
+  .leyenda-item{ display:flex; align-items:center; gap:8px; }
+  .swatch{
+    width: 22px; height: 22px; border-radius: 5px;
+    display:flex; align-items:center; justify-content:center;
+    font-weight: 800; font-size: 13px; border: 1px solid var(--borde);
+  }
+  .swatch.check{ background: var(--verde-bg); color: var(--verde); }
+  .swatch.x{ background: var(--rojo-bg); color: var(--rojo); }
+  .swatch.a{ background: var(--ambar-bg); color: var(--ambar); }
+
+  .leyenda-nota{
+    padding: 8px 14px 14px;
+    font-size: 12.5px;
+    color: var(--texto-suave);
+    border-top: 1px dashed var(--borde);
+  }
+
+  /* Modal usuario */
+  .overlay{
+    position: fixed; inset: 0;
+    background: rgba(20, 30, 50, 0.55);
+    display:flex; align-items:center; justify-content:center;
+    z-index: 50;
+    padding: 20px;
+  }
+  .modal{
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    width: 100%;
+    max-width: 340px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+  }
+  .modal h2{
+    margin: 0 0 6px;
+    font-size: 17px;
+    color: var(--azul-oscuro);
+  }
+  .modal p{
+    margin: 0 0 14px;
+    font-size: 13px;
+    color: var(--texto-suave);
+  }
+  .modal input{
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+  .modal button{
+    width: 100%;
+    padding: 11px;
+    background: var(--azul-oscuro);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .modal button:disabled{ opacity: 0.5; }
+
+  @media (max-width: 640px){
+    .titulo-app{ font-size: 15px; padding: 13px 14px; }
+    td.celda{ width: 56px; min-width: 56px; height: 48px; font-size: 14px; }
+    tbody td.col-nombre{ font-size: 12.5px; }
+    thead th{ font-size: 11.5px; padding: 8px 6px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="titulo-app">Lista de Asistencia - Adolescentes</div>
+
+  <div class="toolbar">
+    <div class="sync-status">
+      <span class="dot" id="syncDot"></span>
+      <span id="syncTexto">Sincronizado</span>
+    </div>
+  </div>
+
+  <div class="tabla-wrap">
+    <table id="tabla">
+      <thead>
+        <tr id="filaEncabezado">
+          <th class="col-nombre">Nombre</th>
+        </tr>
+      </thead>
+      <tbody id="cuerpoTabla"></tbody>
+    </table>
+  </div>
+
+  <div class="leyenda">
+    <div class="leyenda-titulo">INSTRUCCIONES</div>
+    <div class="leyenda-body">
+      <div class="leyenda-item"><span class="swatch check">✓</span> Asistió</div>
+      <div class="leyenda-item"><span class="swatch x">X</span> No asistió</div>
+      <div class="leyenda-item"><span class="swatch a">A</span> Avisó que no podía asistir</div>
+    </div>
+    <div class="leyenda-nota">
+      <b>Toque/clic:</b> cambia al siguiente estado (✓ → X → A → ✓...).
+      &nbsp;&nbsp;<b>Mantener presionado:</b> elimina el estado y deja la celda vacía.
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const NOMBRES = [
+    "Christopher Barrantes","David Zamora","Esteban Hidalgo","Ethan Blanco",
+    "Pablo Andrés García","Harold Fallas","Jared Nuñez","Leonardo Campos",
+    "Pablo Andrés Rodríguez","Samuel Montero","Abigail Alfaro","Alessia Carmona",
+    "Elizabet Najera","Emily Garcia","Hillary","Itamar Nuñez","Isabella Mena",
+    "Jimena Ulate","Juanita Baez","Kianny Parra","Lucia Barrantes",
+    "Maria Paula Chacón","Mariam Garcia","Maryam Moya","Mariangel Ulate",
+    "Mariel Gomez","Mirna Chaves","Rebeca Torres","Saray Quiros","Shelomi Rojas",
+    "Sofia Rodriguez","Nataly Gonzales"
+  ];
+
+  const FECHAS = [
+    "22/08","29/08","05/09","12/09","19/09","26/09","03/10","10/10","17/10",
+    "24/10","31/10","07/11","14/11","21/11","28/11","05/12","12/12","19/12","26/12"
+  ];
+
+  const STORAGE_KEY = "attendance-data";
+  const CICLO = ["✓","X","A"]; // vacío -> ✓ -> X -> A -> ✓ ...
+  const LONG_PRESS_MS = 800;
+  const POLL_MS = 3000;
+
+  let data = {}; // { "Nombre||Fecha": {state, ts} }
+
+  function cellKey(nombre, fecha){ return nombre + "||" + fecha; }
+
+  function setSyncStatus(mode){
+    const dot = document.getElementById('syncDot');
+    const txt = document.getElementById('syncTexto');
+    dot.className = 'dot' + (mode === 'saving' ? ' saving' : mode === 'error' ? ' error' : '');
+    txt.textContent = mode === 'saving' ? 'Guardando...' : mode === 'error' ? 'Error de sincronización' : 'Sincronizado';
+  }
+
+  // ---------- Construcción de la tabla ----------
+  function construirTabla(){
+    const filaEncabezado = document.getElementById('filaEncabezado');
+    FECHAS.forEach(fecha => {
+      const th = document.createElement('th');
+      th.textContent = fecha;
+      filaEncabezado.appendChild(th);
+    });
+
+    const cuerpo = document.getElementById('cuerpoTabla');
+    NOMBRES.forEach(nombre => {
+      const tr = document.createElement('tr');
+
+      const tdNombre = document.createElement('td');
+      tdNombre.className = 'col-nombre';
+      tdNombre.textContent = nombre;
+      tr.appendChild(tdNombre);
+
+      FECHAS.forEach(fecha => {
+        const td = document.createElement('td');
+        td.className = 'celda vacia';
+        td.dataset.nombre = nombre;
+        td.dataset.fecha = fecha;
+        attachCellEvents(td);
+        tr.appendChild(td);
+      });
+
+      cuerpo.appendChild(tr);
+    });
+  }
+
+  function pintarCelda(td){
+    const nombre = td.dataset.nombre;
+    const fecha = td.dataset.fecha;
+    const entry = data[cellKey(nombre, fecha)];
+    const estado = entry ? entry.state : "";
+
+    td.classList.remove('vacia','estado-check','estado-x','estado-a');
+    if(estado === '✓'){ td.classList.add('estado-check'); td.textContent = '✓'; }
+    else if(estado === 'X'){ td.classList.add('estado-x'); td.textContent = 'X'; }
+    else if(estado === 'A'){ td.classList.add('estado-a'); td.textContent = 'A'; }
+    else { td.classList.add('vacia'); td.textContent = ''; }
+
+    if(entry && entry.ts){
+      td.title = estado + " — " + new Date(entry.ts).toLocaleString('es-CR');
+    } else {
+      td.removeAttribute('title');
+    }
+  }
+
+  function pintarTodo(){
+    document.querySelectorAll('td.celda').forEach(pintarCelda);
+  }
+
+  // ---------- Interacción: tap vs long-press ----------
+  function attachCellEvents(td){
+    let pressTimer = null;
+    let longPressFired = false;
+    let startX = 0, startY = 0;
+    const MOVE_TOLERANCE = 10;
+
+    function startPress(x, y){
+      longPressFired = false;
+      startX = x; startY = y;
+      td.classList.add('pressing');
+      pressTimer = setTimeout(() => {
+        longPressFired = true;
+        td.classList.remove('pressing');
+        borrarEstado(td);
+      }, LONG_PRESS_MS);
+    }
+
+    function cancelPress(){
+      if(pressTimer){ clearTimeout(pressTimer); pressTimer = null; }
+      td.classList.remove('pressing');
+    }
+
+    function endPress(){
+      const wasLong = longPressFired;
+      cancelPress();
+      if(!wasLong){
+        avanzarEstado(td);
+      }
+      longPressFired = false;
+    }
+
+    // Mouse
+    td.addEventListener('mousedown', (e) => {
+      if(e.button !== 0) return;
+      startPress(e.clientX, e.clientY);
+    });
+    td.addEventListener('mouseup', (e) => {
+      if(e.button !== 0) return;
+      endPress();
+    });
+    td.addEventListener('mouseleave', cancelPress);
+
+    // Touch
+    td.addEventListener('touchstart', (e) => {
+      const t = e.touches[0];
+      startPress(t.clientX, t.clientY);
+    }, { passive: true });
+
+    td.addEventListener('touchmove', (e) => {
+      const t = e.touches[0];
+      if(Math.abs(t.clientX - startX) > MOVE_TOLERANCE || Math.abs(t.clientY - startY) > MOVE_TOLERANCE){
+        cancelPress();
+        longPressFired = true; // treat as cancelled, avoid triggering tap
+      }
+    }, { passive: true });
+
+    td.addEventListener('touchend', (e) => {
+      e.preventDefault(); // avoid ghost click / double firing
+      endPress();
+    });
+
+    td.addEventListener('touchcancel', cancelPress);
+
+    // Evitar menú contextual / selección al mantener presionado
+    td.addEventListener('contextmenu', (e) => e.preventDefault());
+    td.addEventListener('selectstart', (e) => e.preventDefault());
+  }
+
+  function avanzarEstado(td){
+    const nombre = td.dataset.nombre;
+    const fecha = td.dataset.fecha;
+    const key = cellKey(nombre, fecha);
+    const actual = data[key] ? data[key].state : null;
+
+    let siguiente;
+    if(!actual){ siguiente = '✓'; }
+    else {
+      const idx = CICLO.indexOf(actual);
+      siguiente = CICLO[(idx + 1) % CICLO.length];
+    }
+
+    data[key] = { state: siguiente, ts: Date.now() };
+    pintarCelda(td);
+    guardar();
+  }
+
+  function borrarEstado(td){
+    const nombre = td.dataset.nombre;
+    const fecha = td.dataset.fecha;
+    const key = cellKey(nombre, fecha);
+    if(!data[key]) { pintarCelda(td); return; }
+    delete data[key];
+    pintarCelda(td);
+    guardar();
+  }
+
+  // ---------- Persistencia / sincronización ----------
+  let guardarTimeout = null;
+  function guardar(){
+    setSyncStatus('saving');
+    if(guardarTimeout) clearTimeout(guardarTimeout);
+    guardarTimeout = setTimeout(async () => {
+      try{
+        await window.storage.set(STORAGE_KEY, JSON.stringify(data), true);
+        setSyncStatus('ok');
+      }catch(err){
+        console.error('Error guardando asistencia:', err);
+        setSyncStatus('error');
+      }
+    }, 150);
+  }
+
+  async function cargar(){
+    try{
+      const res = await window.storage.get(STORAGE_KEY, true);
+      if(res && res.value){
+        data = JSON.parse(res.value);
+      } else {
+        data = {};
+      }
+      pintarTodo();
+      setSyncStatus('ok');
+    }catch(err){
+      // La clave puede no existir aún
+      data = {};
+      pintarTodo();
+      setSyncStatus('ok');
+    }
+  }
+
+  async function sondear(){
+    try{
+      const res = await window.storage.get(STORAGE_KEY, true);
+      const nuevo = res && res.value ? JSON.parse(res.value) : {};
+      if(JSON.stringify(nuevo) !== JSON.stringify(data)){
+        data = nuevo;
+        pintarTodo();
+      }
+      setSyncStatus('ok');
+    }catch(err){
+      // sin cambios / clave inexistente todavía
+    }
+  }
+
+  // ---------- Inicio ----------
+  construirTabla();
+  cargar();
+  setInterval(sondear, POLL_MS);
+})();
+</script>
+
+</body>
+</html>
