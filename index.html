@@ -315,6 +315,15 @@
   </div>
 </div>
 
+<div class="overlay" id="overlaySetup" style="display:none;">
+  <div class="modal" style="max-width: 420px;">
+    <h2>Configuración inicial (una sola vez)</h2>
+    <p>Esta app todavía no tiene una base de datos conectada. Haz clic en el botón para crear una gratis (sin cuenta, sin login). Solo lo hace <b>una persona, una vez</b>.</p>
+    <button id="btnCrearBlob">Crear base de datos ahora</button>
+    <div id="setupResultado" style="margin-top:14px; font-size:13px; line-height:1.5; color:#1B2733;"></div>
+  </div>
+</div>
+
 <script>
 (function(){
   const NOMBRES = [
@@ -333,12 +342,24 @@
     "24/10","31/10","07/11","14/11","21/11","28/11","05/12","12/12","19/12","26/12"
   ];
 
-  const STORAGE_KEY = "attendance-data";
   const CICLO = ["✓","X","A"]; // vacío -> ✓ -> X -> A -> ✓ ...
   const LONG_PRESS_MS = 800;
-  const POLL_MS = 3000;
+
+  // ============================================================
+  // CONFIGURACIÓN — JSONBlob (servicio gratis, SIN cuenta, SIN login)
+  // https://jsonblob.com — solo necesitas un BLOB_ID, que se crea
+  // una sola vez desde esta misma app (ver pantalla de configuración
+  // que aparece abajo si BLOB_ID está vacío).
+  // ============================================================
+  const BLOB_ID = ""; // <-- pega aquí tu ID una vez que lo generes
+  // ============================================================
+
+  const BLOB_BASE = "https://jsonblob.com/api/jsonBlob";
+  const POLL_MS = 4000;
 
   let data = {}; // { "Nombre||Fecha": {state, ts} }
+  let blobId = BLOB_ID;
+  let listo = false;
 
   function cellKey(nombre, fecha){ return nombre + "||" + fecha; }
 
@@ -490,9 +511,10 @@
       siguiente = CICLO[(idx + 1) % CICLO.length];
     }
 
+    // Actualización optimista en pantalla; se confirma al guardar
     data[key] = { state: siguiente, ts: Date.now() };
     pintarCelda(td);
-    guardar();
+    guardarCambio(nombre, fecha, siguiente);
   }
 
   function borrarEstado(td){
@@ -502,75 +524,124 @@
     if(!data[key]) { pintarCelda(td); return; }
     delete data[key];
     pintarCelda(td);
-    guardar();
+    guardarCambio(nombre, fecha, null);
   }
 
-  // ---------- Persistencia / sincronización ----------
-  let guardarTimeout = null;
-  function guardar(){
+  // ---------- Persistencia / sincronización con JSONBlob ----------
+  function blobUrl(){ return BLOB_BASE + "/" + blobId; }
+
+  async function guardarCambio(nombre, fecha, estadoOrNull){
+    if(!listo){ setSyncStatus('error', 'Todavía no hay un BLOB_ID configurado'); return; }
     setSyncStatus('saving');
-    if(guardarTimeout) clearTimeout(guardarTimeout);
-    guardarTimeout = setTimeout(() => intentarGuardar(0), 150);
-  }
-
-  async function intentarGuardar(intento){
     try{
-      if(!window.storage) throw new Error('window.storage no está disponible en este entorno');
-      await window.storage.set(STORAGE_KEY, JSON.stringify(data), true);
-      setSyncStatus('ok');
-    }catch(err){
-      console.error('Error guardando asistencia (intento ' + (intento + 1) + '):', err);
-      if(intento < 2){
-        setTimeout(() => intentarGuardar(intento + 1), 1000 * (intento + 1));
+      // Traer lo más reciente para reducir choques con otros usuarios editando a la vez
+      const resGet = await fetch(blobUrl());
+      let remoto = resGet.ok ? await resGet.json() : {};
+      const key = cellKey(nombre, fecha);
+      if(estadoOrNull){
+        remoto[key] = { state: estadoOrNull, ts: Date.now() };
       } else {
-        setSyncStatus('error', err && err.message);
+        delete remoto[key];
       }
-    }
-  }
-
-  async function cargar(){
-    if(!window.storage){
-      setSyncStatus('error', 'window.storage no disponible: abre esta app dentro de Claude, no como archivo local');
-      document.getElementById('syncTexto').textContent = 'Sin sincronización (abre esto dentro de Claude)';
-      pintarTodo();
-      return;
-    }
-    try{
-      const res = await window.storage.get(STORAGE_KEY, true);
-      if(res && res.value){
-        data = JSON.parse(res.value);
-      } else {
-        data = {};
-      }
+      const resPut = await fetch(blobUrl(), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(remoto)
+      });
+      if(!resPut.ok) throw new Error('PUT falló con estado ' + resPut.status);
+      data = remoto;
       pintarTodo();
       setSyncStatus('ok');
     }catch(err){
-      // La clave puede no existir aún
-      data = {};
-      pintarTodo();
-      setSyncStatus('ok');
+      console.error('Error guardando cambio:', err);
+      setSyncStatus('error', err && err.message);
     }
   }
 
   async function sondear(){
-    if(!window.storage) return;
+    if(!listo) return;
     try{
-      const res = await window.storage.get(STORAGE_KEY, true);
-      const nuevo = res && res.value ? JSON.parse(res.value) : {};
+      const res = await fetch(blobUrl());
+      if(!res.ok) throw new Error('GET falló con estado ' + res.status);
+      const nuevo = await res.json();
       if(JSON.stringify(nuevo) !== JSON.stringify(data)){
         data = nuevo;
         pintarTodo();
       }
       setSyncStatus('ok');
     }catch(err){
-      // sin cambios / clave inexistente todavía
+      console.error('Error sondeando cambios:', err);
+      setSyncStatus('error', err && err.message);
+    }
+  }
+
+  async function cargarInicial(){
+    setSyncStatus('saving');
+    try{
+      const res = await fetch(blobUrl());
+      if(!res.ok) throw new Error('GET inicial falló con estado ' + res.status);
+      data = await res.json();
+      pintarTodo();
+      setSyncStatus('ok');
+    }catch(err){
+      console.error('Error cargando datos iniciales:', err);
+      setSyncStatus('error', err && err.message);
+    }
+  }
+
+  // ---------- Configuración inicial del BLOB_ID (una sola vez) ----------
+  async function crearBlobNuevo(){
+    const btn = document.getElementById('btnCrearBlob');
+    const resultado = document.getElementById('setupResultado');
+    btn.disabled = true;
+    btn.textContent = 'Creando...';
+    try{
+      const res = await fetch(BLOB_BASE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      if(!res.ok) throw new Error('No se pudo crear el blob (estado ' + res.status + ')');
+      const location = res.headers.get('Location') || res.headers.get('location');
+      let idNuevo = null;
+      if(location){
+        idNuevo = location.split('/').pop();
+      } else {
+        // Algunos navegadores bloquean leer el header Location por CORS.
+        // En ese caso, hay que crear el blob manualmente (ver instrucciones).
+        throw new Error('El navegador bloqueó el header Location. Sigue el paso manual de las instrucciones.');
+      }
+      resultado.innerHTML =
+        '<b>¡Listo! Tu BLOB_ID es:</b><br>' +
+        '<code style="user-select:all; background:#eef2f9; padding:4px 8px; border-radius:6px; display:inline-block; margin:6px 0;">' + idNuevo + '</code><br>' +
+        'Copia ese código, pégalo dentro de <code>const BLOB_ID = "";</code> en el archivo HTML, guarda y vuelve a subir el archivo. Mientras tanto, esta sesión ya puede usarse de prueba.';
+      blobId = idNuevo;
+      listo = true;
+      await cargarInicial();
+      setInterval(sondear, POLL_MS);
+      setTimeout(() => { document.getElementById('overlaySetup').style.display = 'none'; }, 4000);
+    }catch(err){
+      console.error(err);
+      resultado.innerHTML = '<span style="color:#C0392B">' + err.message + '</span>';
+      btn.disabled = false;
+      btn.textContent = 'Reintentar';
+    }
+  }
+
+  function iniciarConexion(){
+    if(blobId){
+      listo = true;
+      cargarInicial();
+      setInterval(sondear, POLL_MS);
+    } else {
+      document.getElementById('overlaySetup').style.display = 'flex';
+      document.getElementById('btnCrearBlob').addEventListener('click', crearBlobNuevo);
     }
   }
 
   // ---------- Inicio ----------
   construirTabla();
-  cargar();
-  setInterval(sondear, POLL_MS);
+  iniciarConexion();
 })();
 </script>
 
